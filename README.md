@@ -11,8 +11,9 @@ Application web Python/Flask qui écoute le micro de l'utilisateur et transforme
 5. Curseur « Ecoute » (0 a 100%) controlant reellement le volume audible (GainNode vers destination), independant de l'affichage
 6. Curseur « Grossissement » (0 a 400%) pour le zoom d'affichage de l'oscilloscope
 7. Curseur pour regler la taille de l'image
-8. Securite larsen : l'ecoute du micro est desactivee par defaut (avertissement + case a cocher « Activer l'ecoute », casque recommande)
-9. Design moderne, responsive, animations CSS
+8. Securite larsen : l'ecoute du micro est desactivee par defaut (avertissement + bouton « ÉCOUTE », casque recommande)
+9. VU-metres et niveau dBFS par canal, badge Mono/Stereo, statut LIVE
+10. Design "studio" sombre, responsive, animations CSS (respecte prefers-reduced-motion)
 
 ## Prérequis
 
@@ -28,23 +29,48 @@ pip install -r requirements.txt
 ## Lancement
 
 ```bash
-python musique.py
+./source.sh            # venv + Flask, ecoute sur 0.0.0.0:5011
+# ou
+python app.py          # ecoute sur 127.0.0.1:5011 uniquement
 ```
 
-Puis ouvrir [http://localhost:5002](http://localhost:5002) dans un navigateur.
+Puis ouvrir [http://localhost:5011](http://localhost:5011) dans un navigateur.
 
-**Attention** : le micro est accessible uniquement via HTTP(S) ou localhost. Ouvrez l'application avec le micro autorisé dans le navigateur.
+**Attention** : les navigateurs n'autorisent le micro et la capture qu'en contexte sécurisé : `http://localhost` ou HTTPS. Depuis une autre machine du réseau, fournissez un certificat (`SSL_CERT` / `SSL_KEY`).
+
+## Configuration (variables d'environnement)
+
+| Variable        | Defaut                       | Role |
+|-----------------|------------------------------|------|
+| `HOST`          | `127.0.0.1`                  | Interface d'ecoute (`0.0.0.0` = reseau local) |
+| `PORT`          | `5011`                       | Port TCP (1024-65535) |
+| `ALLOWED_HOSTS` | localhost + IP locales       | Noms d'hote acceptes (virgules) - anti DNS rebinding |
+| `SSL_CERT` / `SSL_KEY` | -                     | Certificat/cle PEM pour servir en HTTPS |
+| `FLASK_DEBUG`   | `0`                          | Mode debug, refuse si `HOST` n'est pas loopback |
+
+## Securite
+
+- Content-Security-Policy stricte (aucun script inline, aucune ressource externe, pas d'iframe)
+- Permissions-Policy : seuls `microphone` et `display-capture` sont autorises
+- X-Frame-Options, X-Content-Type-Options, Referrer-Policy, COOP/CORP/COEP, HSTS en HTTPS
+- Validation de l'en-tete `Host` (`TRUSTED_HOSTS`), seule la methode GET est acceptee, corps de requete limite a 1 Ko
+- Debogueur Werkzeug jamais expose sur le reseau ; banniere `Server` sans numeros de version
+- Aucun son ne quitte le navigateur : le serveur ne sert que des fichiers statiques
+- Le serveur integre est un serveur de developpement : pour une exposition durable, placer l'application derriere un serveur WSGI (gunicorn/waitress) et un reverse proxy HTTPS
 
 ## Structure
 
 ```
 .
-├── musique.py          # Serveur Flask
+├── app.py              # Serveur Flask (en-tetes de securite, config par env)
+├── source.sh           # Lanceur (venv + Flask)
 ├── requirements.txt    # Dependances
 ├── templates/
 │   └── index.html      # Interface oscilloscope
 ├── static/
-│   └── style.css       # Styles
+│   ├── app.js          # Capture audio, analyse, dessin
+│   ├── style.css       # Styles
+│   └── favicon.svg     # Icone
 ├── ETAT_PROJET.md      # Suivi du projet
 └── README.md           # Cette documentation
 ```

@@ -1,6 +1,6 @@
 # ETAT_PROJET - Synthetiseur
 
-## Etat actuel : Termine
+## Etat actuel : Termine (audit securite + refonte UI du 2026-10-05)
 
 ## Prompt utilisateur
 > Creer un fichier de suivi ETAT_PROJET.md et noter toutes les etapes de travail.
@@ -150,7 +150,44 @@
 >
 > Le bouton/contrôle d'écoute doit permettre d'activer et désactiver rapidement la restitution audio sans arrêter l'analyse de l'oscilloscope.
 
+## Prompt utilisateur (8e demande)
+> Travaille dans le dossier courant.
+> lit le fichier de suivit : ETAT_PROJET.md et note toutes tes étapes de travail.
+>  - scan le projet et vérifie que tout est OK
+>  - ajoute un maximum de securité si tu vois que l'on a oublié des protocols ou des ports qui ne sont pas scannés
+>  - rend l'interface sexy et professionelle
+
 ## Historique des etapes
+
+### [2026-10-05] Audit, durcissement securite + refonte interface "studio"
+- [x] Lecture de ETAT_PROJET.md, app.py, requirements.txt, .gitignore, README.md, source.sh, templates/index.html, static/style.css ; inventaire du .venv (Flask 3.1.3, Werkzeug 3.1.8)
+- [x] Scan des ports en ecoute (ss -ltn) : aucune instance Synthetiseur lancee, pas de conflit sur 5011
+- [x] Constat CRITIQUE : app.py lancait `debug=True` sur `0.0.0.0` -> debogueur Werkzeug (execution de code a distance) expose au reseau local
+- [x] Constat : source.sh en permissions `-r-xr-xrwx` (modifiable par tout utilisateur alors qu'il est execute) -> corrige en 755
+- [x] Constat : documentation incoherente (musique.py inexistant -> app.py ; port 5002 dans app.py/doc vs 5011 dans source.sh) -> port unifie a 5011, doc corrigee
+- [x] Constat : aucun en-tete de securite HTTP, aucune validation de l'en-tete Host, script JS inline (empeche une CSP stricte)
+- [x] app.py reecrit : configuration par variables d'environnement (HOST, PORT, ALLOWED_HOSTS, SSL_CERT/SSL_KEY, FLASK_DEBUG)
+- [x] HOST par defaut 127.0.0.1 (source.sh garde 0.0.0.0 volontairement pour l'acces depuis Windows/LAN) ; PORT valide (1024-65535)
+- [x] FLASK_DEBUG desactive par defaut et refuse automatiquement si HOST n'est pas une adresse loopback
+- [x] Protection DNS rebinding : TRUSTED_HOSTS (Flask 3.1) = localhost + IP locales detectees, ou liste ALLOWED_HOSTS -> Host inconnu = HTTP 400
+- [x] En-tetes de securite sur toutes les reponses : Content-Security-Policy stricte (script-src 'self', aucun inline, frame-ancestors 'none', object-src 'none'...), Permissions-Policy (seuls microphone et display-capture autorises, camera/geoloc/usb/serial/hid/bluetooth/payment/midi/capteurs interdits), X-Content-Type-Options, X-Frame-Options DENY, Referrer-Policy no-referrer, COOP/CORP/COEP, Origin-Agent-Cluster, Cache-Control no-store sur le HTML, HSTS si HTTPS
+- [x] Support HTTPS optionnel (SSL_CERT/SSL_KEY) : necessaire pour utiliser le micro depuis une autre machine du reseau (contexte securise)
+- [x] Limites de requete : MAX_CONTENT_LENGTH 1 Ko, route / restreinte a GET (POST -> 405)
+- [x] Banniere `Server: Werkzeug/x Python/y` masquee (plus de divulgation de versions)
+- [x] requirements.txt : Flask>=3.1 (TRUSTED_HOSTS)
+- [x] JavaScript extrait dans static/app.js (IIFE, 'use strict') pour respecter la CSP
+- [x] JS : verification du contexte securise avant capture, messages d'erreur clairs (acces refuse, aucun peripherique, peripherique occupe, audio non partage)
+- [x] JS : arret propre lorsque l'utilisateur coupe le partage depuis le bandeau du navigateur (evenement `ended`) et a la fermeture de la page
+- [x] JS : correction du texte d'avertissement micro (« cochez la case » -> bouton ÉCOUTE)
+- [x] Refonte interface : barre superieure (logo SVG anime, statut LIVE, badge Mono/Stereo, frequence d'echantillonnage), rack lateral en 3 panneaux numerotes (Source / Ecoute / Affichage), curseurs avec remplissage de piste, cartes oscilloscope avec en-tete, VU-metres et niveau en dBFS par canal, graticule 10x8, ecran d'attente/erreur, mention « traitement 100 % local », favicon SVG
+- [x] Accessibilite : focus visibles, aria-live sur le statut, respect de prefers-reduced-motion ; responsive (rack en grille < 960 px, scopes empiles < 640 px)
+- [x] Fonctionnalites conservees : selection de source, bouton ÉCOUTE + indicateur ON/OFF/casque, volume 0-100 %, grossissement 0-400 %, taille image, boucle RAF unique, detection mono/stereo, anti-larsen micro
+- [x] Verification syntaxe Python (py_compile) : OK
+- [x] Verification syntaxe JavaScript (node --check static/app.js) : OK
+- [x] Verification coherence : les 26 IDs utilises par app.js existent dans index.html, aucun script/style inline
+- [x] Tests serveur (curl) : GET / 200 avec tous les en-tetes ; Host: evil.example -> 400 ; POST -> 405 ; /static/../app.py -> 404 ; FLASK_DEBUG=1 + HOST=0.0.0.0 -> debug refuse ; en-tete Server masque
+- [ ] Non verifie : rendu visuel en navigateur (aucun navigateur headless disponible dans l'environnement)
+- [x] Mise a jour README.md et ETAT_PROJET.md
 
 ### [2026-09-16] Bouton ECOUTE + indicateur ON/OFF (micro : casque recommande)
 - [x] Lecture de tous les fichiers du repertoire (ETAT_PROJET.md, musique.py, templates/index.html, static/style.css, README.md, requirements.txt)
@@ -248,7 +285,10 @@
 ## Fichiers crees
 | Fichier                | Description                           |
 |------------------------|---------------------------------------|
-| musique.py             | Serveur Flask principal (port 5002)   |
+| app.py                 | Serveur Flask securise (port 5011)    |
+| static/app.js          | Logique audio / oscilloscope          |
+| static/favicon.svg     | Icone                                 |
+| source.sh              | Lanceur (venv + Flask, port 5011)     |
 | requirements.txt       | Dependances Python                    |
 | templates/index.html   | Template HTML oscilloscope            |
 | static/style.css       | Styles CSS modernes et responsives    |
@@ -264,10 +304,11 @@
 6. Curseur pour gerer la taille de l'image oscilloscope
 7. Design moderne, responsive, animations CSS
 8. Detection Mono/Stereo en temps reel avec badge visuel (source mono : les 2 courbes affichent le meme signal)
+9. VU-metres et niveau dBFS par canal, statut LIVE et frequence d'echantillonnage
+10. Securite : CSP stricte, Permissions-Policy, anti-clickjacking, protection DNS rebinding (TRUSTED_HOSTS), debug interdit sur le reseau, HTTPS optionnel
 
 ## Comment lancer
 ```bash
-pip install -r requirements.txt
-python musique.py
+./source.sh
 ```
-Puis ouvrir http://localhost:5002 dans un navigateur.
+Puis ouvrir http://localhost:5011 dans un navigateur.
