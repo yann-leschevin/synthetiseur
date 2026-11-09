@@ -1,8 +1,45 @@
-# Synthetiseur
+# Synthétiseur — oscilloscope stéréo
+
+> 🌐 **Essayer en ligne : <https://leschevin.com/projets/synthetiseur/>**
+>
+> 🤝 **Version PHP et mise en ligne réalisées par Yann Leschevin ([@yann-leschevin](https://github.com/yann-leschevin)) en collaboration avec Claude (Anthropic), via [Claude Code](https://claude.com/claude-code)** — novembre 2026.
+
+Oscilloscope stéréo en temps réel : le son du micro (ou d'un onglet / d'une application) est dessiné en direct. Traitement 100 % dans le navigateur.
+
+Ce dépôt contient **deux versions** du projet :
+
+| Partie | Dossier | Rôle | Lancer en local |
+|--------|---------|------|-----------------|
+| 🐍 **Python** (Flask) | racine du dépôt | version d'origine, à lancer sur son ordinateur | `./source.sh` (ou `python3 app.py`) puis http://localhost:5011 |
+| 🐘 **PHP** | [`php/`](php/) | version publiée sur [leschevin.com](https://leschevin.com/projets/synthetiseur/) (hébergement OVH) | `cd php && php -S 127.0.0.1:8080 -t www` |
+
+---
+
+## 🐘 Partie PHP — version en ligne
+
+👉 <https://leschevin.com/projets/synthetiseur/> · documentation détaillée : [`php/README.md`](php/README.md)
+
+- `index.php` sert la page avec **les mêmes en-têtes de sécurité** que `app.py`
+  (CSP stricte, Permissions-Policy limitée au micro et à la capture d'écran, COOP/COEP…) ;
+- bouton « Activer la source » mis en avant tant qu'aucune source n'est active ;
+- le micro exige le **https** (c'est le cas sur leschevin.com).
+
+Tests : `bash php/tests/test.sh`.
+
+Le dossier `php/www/` est exactement ce qui est envoyé sur l'hébergement (dans `www/projets/synthetiseur/`).
+
+---
+
+## 🐍 Partie Python — version d'origine
+
+Le code Python n'a pas été modifié par le portage : il reste à la racine du dépôt.
+Sa documentation d'origine suit.
+
+### Synthetiseur
 
 Application web Python/Flask qui écoute le micro de l'utilisateur et transforme le son en image, comme un oscilloscope temps réel.
 
-## Fonctionnalites
+#### Fonctionnalites
 
 1. Selection de la source d'entree : Micro, Autre application (fenetre) ou Chrome (onglet), a la maniere du melangeur Windows
 2. Ecoute reelle du son dans les haut-parleurs/casque via la Web Audio API (en pur navigateur, aucun fichier audio n'est stocké)
@@ -15,18 +52,18 @@ Application web Python/Flask qui écoute le micro de l'utilisateur et transforme
 9. VU-metres et niveau dBFS par canal, badge Mono/Stereo, statut LIVE
 10. Design "studio" sombre, responsive, animations CSS (respecte prefers-reduced-motion)
 
-## Prérequis
+#### Prérequis
 
 - Python 3.8+
 - `pip`
 
-## Installation
+#### Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Lancement
+#### Lancement
 
 ```bash
 ./source.sh            # venv + Flask, ecoute sur 0.0.0.0:5011
@@ -38,7 +75,7 @@ Puis ouvrir [http://localhost:5011](http://localhost:5011) dans un navigateur.
 
 **Attention** : les navigateurs n'autorisent le micro et la capture qu'en contexte sécurisé : `http://localhost` ou HTTPS. Depuis une autre machine du réseau, fournissez un certificat (`SSL_CERT` / `SSL_KEY`).
 
-## Configuration (variables d'environnement)
+#### Configuration (variables d'environnement)
 
 | Variable        | Defaut                       | Role |
 |-----------------|------------------------------|------|
@@ -48,7 +85,7 @@ Puis ouvrir [http://localhost:5011](http://localhost:5011) dans un navigateur.
 | `SSL_CERT` / `SSL_KEY` | -                     | Certificat/cle PEM pour servir en HTTPS |
 | `FLASK_DEBUG`   | `0`                          | Mode debug, refuse si `HOST` n'est pas loopback |
 
-## Securite
+#### Securite
 
 - Content-Security-Policy stricte (aucun script inline, aucune ressource externe, pas d'iframe)
 - Permissions-Policy : seuls `microphone` et `display-capture` sont autorises
@@ -58,7 +95,7 @@ Puis ouvrir [http://localhost:5011](http://localhost:5011) dans un navigateur.
 - Aucun son ne quitte le navigateur : le serveur ne sert que des fichiers statiques
 - Le serveur integre est un serveur de developpement : pour une exposition durable, placer l'application derriere un serveur WSGI (gunicorn/waitress) et un reverse proxy HTTPS
 
-## Structure
+#### Structure
 
 ```
 .
@@ -75,7 +112,7 @@ Puis ouvrir [http://localhost:5011](http://localhost:5011) dans un navigateur.
 └── README.md           # Cette documentation
 ```
 
-## Details techniques
+#### Details techniques
 
 - Backend : Flask (uniquement Python)
 - Cote client : Web Audio API pour capturer la source (`getUserMedia` pour le micro, `getDisplayMedia` avec `displaySurface` window/browser pour les applications et onglets Chrome)

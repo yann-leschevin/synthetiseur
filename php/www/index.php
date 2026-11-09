@@ -1,0 +1,162 @@
+<?php
+// Synthétiseur — version en ligne (leschevin.com/projets/synthetiseur/).
+// Le traitement audio se fait à 100 % dans le navigateur ; PHP sert la page
+// avec les mêmes en-têtes de sécurité que la version Python (app.py).
+if (is_file(__DIR__ . '/../compter_visite.php')) { require_once __DIR__ . '/../compter_visite.php'; compter_visite('synthetiseur'); }
+
+header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    . "font-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; base-uri 'none'; "
+    . "form-action 'none'; frame-ancestors 'none'; object-src 'none'");
+header('Permissions-Policy: microphone=(self), display-capture=(self), camera=(), geolocation=(), usb=(), '
+    . 'serial=(), hid=(), bluetooth=(), payment=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=()');
+header('X-Frame-Options: DENY');
+header('Referrer-Policy: no-referrer');
+header('Cross-Origin-Opener-Policy: same-origin');
+header('Cross-Origin-Resource-Policy: same-origin');
+header('Cross-Origin-Embedder-Policy: require-corp');
+header('X-Permitted-Cross-Domain-Policies: none');
+header('Origin-Agent-Cluster: ?1');
+header('Cache-Control: no-store');
+if (($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') {
+    header('Strict-Transport-Security: max-age=31536000');
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'HEAD') {
+    http_response_code(405);
+    header('Allow: GET');
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#07090f">
+    <meta name="referrer" content="no-referrer">
+    <meta name="description" content="Synthetiseur - oscilloscope stereo temps reel, traitement audio 100 % local dans le navigateur.">
+    <title>Synthetiseur</title>
+    <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
+    <link rel="stylesheet" href="static/style.css">
+    <script src="static/app.js" defer></script>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+                <rect x="1" y="1" width="30" height="30" rx="8"/>
+                <path d="M5 16h4l3-8 4 16 4-12 2 4h5"/>
+            </svg>
+            <div class="brand-text">
+                <h1 class="app-title">Synthetiseur</h1>
+                <p class="app-subtitle">Oscilloscope stéréo temps réel</p>
+            </div>
+        </div>
+
+        <div id="freq-display" class="freq-display" aria-live="off" title="Fréquence fondamentale détectée">
+            <span id="freq-value" class="freq-value">—</span>
+            <span class="freq-unit">Hz</span>
+            <span id="freq-note" class="freq-note"></span>
+        </div>
+
+        <div class="topbar-status" aria-live="polite">
+            <span id="status-pill" class="pill">
+                <span class="pill-dot" aria-hidden="true"></span>
+                <span id="status-text">Hors ligne</span>
+            </span>
+            <span id="scope-mode" class="pill pill-mode" hidden>Stéréo</span>
+            <span id="sample-rate" class="pill pill-muted" hidden></span>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="rack" aria-label="Réglages">
+            <section class="panel">
+                <h2 class="panel-title"><span class="panel-index">01</span> Source</h2>
+                <label class="field" for="source-select">
+                    <span class="field-label">Entrée audio</span>
+                    <select id="source-select" class="source-select">
+                        <option value="micro">Micro</option>
+                        <option value="other">Autre application…</option>
+                        <option value="chrome">Chrome (onglet)</option>
+                    </select>
+                </label>
+                <button id="mic-btn" class="mic-btn" type="button" aria-pressed="false">
+                    <span class="mic-dot" aria-hidden="true"></span>
+                    <span id="mic-btn-label">Activer la source</span>
+                </button>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title"><span class="panel-index">02</span> Écoute</h2>
+                <div class="listen-row">
+                    <button id="listen-btn" class="listen-btn" type="button" aria-pressed="false" disabled>
+                        <span id="listen-dot" class="listen-dot" aria-hidden="true"></span>
+                        <span id="listen-btn-text">ÉCOUTE</span>
+                    </button>
+                    <output id="listen-state" class="listen-state" for="listen-btn">ÉCOUTE : OFF</output>
+                </div>
+                <label class="field" for="listen-slider">
+                    <span class="field-head">
+                        <span class="field-label">Volume</span>
+                        <span class="field-value"><output id="listen-value" for="listen-slider">100</output>&nbsp;%</span>
+                    </span>
+                    <input id="listen-slider" class="range" type="range" min="0" max="100" value="100">
+                </label>
+                <div id="listen-warning" class="listen-warning" role="status" hidden></div>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title"><span class="panel-index">03</span> Affichage</h2>
+                <label class="field" for="zoom-slider">
+                    <span class="field-head">
+                        <span class="field-label">Grossissement</span>
+                        <span class="field-value"><output id="zoom-value" for="zoom-slider">100</output>&nbsp;%</span>
+                    </span>
+                    <input id="zoom-slider" class="range" type="range" min="0" max="400" value="100">
+                </label>
+                <label class="field" for="size-slider">
+                    <span class="field-head">
+                        <span class="field-label">Taille image</span>
+                        <span class="field-value"><output id="size-value" for="size-slider">100</output>&nbsp;%</span>
+                    </span>
+                    <input id="size-slider" class="range" type="range" min="40" max="100" value="100">
+                </label>
+            </section>
+
+            <p class="privacy">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/></svg>
+                Traitement 100&nbsp;% local&nbsp;: aucun son n'est envoyé au serveur.
+            </p>
+        </aside>
+
+        <section class="stage" aria-label="Oscilloscopes">
+            <div class="scope-grid">
+                <article class="scope-card">
+                    <header class="scope-head">
+                        <span id="channel-left" class="channel-label channel-left">Gauche</span>
+                        <span class="meter" aria-hidden="true"><span id="meter-left" class="meter-fill"></span></span>
+                        <span id="db-left" class="db">-∞ dB</span>
+                    </header>
+                    <canvas id="scope-left" class="scope"></canvas>
+                </article>
+                <article class="scope-card">
+                    <header class="scope-head">
+                        <span id="channel-right" class="channel-label channel-right">Droite</span>
+                        <span class="meter" aria-hidden="true"><span id="meter-right" class="meter-fill"></span></span>
+                        <span id="db-right" class="db">-∞ dB</span>
+                    </header>
+                    <canvas id="scope-right" class="scope"></canvas>
+                </article>
+            </div>
+            <div id="scope-status" class="scope-status">
+                <div class="status-card">
+                    <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 24h8l4-12 6 24 6-18 4 6h12"/></svg>
+                    <p id="scope-status-text">En attente de la source…</p>
+                    <small>Choisissez une entrée puis cliquez sur « Activer la source ».</small>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
